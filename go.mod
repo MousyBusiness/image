@@ -1,4 +1,4 @@
-module golang.org/x/image
+module github.com/mousybusiness/image
 
 go 1.12
 

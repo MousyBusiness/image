@@ -157,7 +157,7 @@ func decodeConfig(r io.Reader) (config image.Config, bitsPerPixel int, topDown b
 	if infoLen != infoHeaderLen && infoLen != v4InfoHeaderLen && infoLen != v5InfoHeaderLen {
 		return image.Config{}, 0, false, ErrUnsupported
 	}
-	if _, err := io.ReadFull(r, b[fileHeaderLen+4:fileHeaderLen+infoLen]); err != nil {
+	if _, err := io.ReadFull(r, b[fileHeaderLen+4:offset]); err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
@@ -174,11 +174,15 @@ func decodeConfig(r io.Reader) (config image.Config, bitsPerPixel int, topDown b
 	// We only support 1 plane and 8, 24 or 32 bits per pixel and no
 	// compression.
 	planes, bpp, compression := readUint16(b[26:28]), readUint16(b[28:30]), readUint32(b[30:34])
+
+	// difference between offset and headers will be the size of bitmasks
+	bitmasks := offset - (infoLen + fileHeaderLen)
+
 	// if compression is set to BITFIELDS, but the bitmask is set to the default bitmask
 	// that would be used if compression was set to 0, we can continue as if compression was 0
-	if compression == 3 && infoLen > infoHeaderLen &&
+	if compression == 3 && bitmasks >= 12 &&
 		readUint32(b[54:58]) == 0xff0000 && readUint32(b[58:62]) == 0xff00 &&
-		readUint32(b[62:66]) == 0xff && readUint32(b[66:70]) == 0xff000000 {
+		readUint32(b[62:66]) == 0xff {
 		compression = 0
 	}
 	if planes != 1 || compression != 0 {
@@ -206,9 +210,6 @@ func decodeConfig(r io.Reader) (config image.Config, bitsPerPixel int, topDown b
 		}
 		return image.Config{ColorModel: color.RGBAModel, Width: width, Height: height}, 24, topDown, nil
 	case 32:
-		if offset != fileHeaderLen+infoLen {
-			return image.Config{}, 0, false, ErrUnsupported
-		}
 		return image.Config{ColorModel: color.RGBAModel, Width: width, Height: height}, 32, topDown, nil
 	}
 	return image.Config{}, 0, false, ErrUnsupported
